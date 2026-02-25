@@ -69,7 +69,7 @@ def call_gemini(image_path, api_key):
     client = genai.Client(api_key=api_key)
     img = Image.open(image_path)
     response = client.models.generate_content(
-        model='gemini-1.5-pro',
+        model='gemini-1.5-pro-latest',
         contents=[PROMPT, img]
     )
     return response.text.strip()
