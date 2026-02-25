@@ -314,6 +314,7 @@ class AIcceptorApp(ctk.CTk):
                         self.last_action_time = time.time()
                     else:
                         self.log("SAFE action, but no coordinates provided.")
+                        self.last_action_time = time.time()
                 
                 elif status == "UNSAFE":
                     reason = result.get("reason", "Unknown Reason")
@@ -323,9 +324,11 @@ class AIcceptorApp(ctk.CTk):
                 
                 elif status == "NONE":
                     self.log("No Antigravity prompt detected.")
+                    self.last_action_time = time.time()
                     
             except Exception as e:
                 self.log(f"API Error: {str(e)}")
+                self.last_action_time = time.time() + 20  # Add extra 20s backoff for API errors to preserve quota
             
             # Clean up
             if os.path.exists(screenshot_path):
