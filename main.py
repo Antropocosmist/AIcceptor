@@ -77,7 +77,13 @@ def check_local_ocr(image_path):
             candidate = observation.topCandidates_(1).firstObject()
             if candidate:
                 text = candidate.string().lower()
-                if "accept" in text or "allow" in text or "antigravity" in text:
+                # UI buttons are short (e.g. "Accept", "Accept 2 Files", "Accept all")
+                # Source code lines containing the word "accept" will be long.
+                if ("accept" in text or "allow" in text) and len(text) < 30:
+                    # Ignore the AIcceptor app's own text logs
+                    if "aicceptor" in text:
+                        continue
+                    
                     is_detected = True
                     bbox = observation.boundingBox()
                     x = (bbox.origin.x + bbox.size.width / 2.0) * screen_w
