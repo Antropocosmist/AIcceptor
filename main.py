@@ -8,6 +8,11 @@ import base64
 import customtkinter as ctk
 from PIL import Image
 
+# macOS Native OCR
+import Quartz
+import Vision
+from AppKit import NSImage
+
 # Import models
 import anthropic
 import dashscope
@@ -49,6 +54,32 @@ Respond strictly in the following JSON format:
 
 Return ONLY valid JSON.
 """
+
+def check_local_ocr(image_path):
+    """Uses macOS Vision framework to scan for 'Accept' or 'Allow' instantly."""
+    try:
+        ns_image = NSImage.alloc().initWithContentsOfFile_(image_path)
+        if not ns_image:
+            return False
+        cg_image = ns_image.CGImageForProposedRect_context_hints_(None, None, None)[0]
+        request = Vision.VNRecognizeTextRequest.alloc().init()
+        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast) # Use fast level for quick trigger
+        handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(cg_image, None)
+        success, _ = handler.performRequests_error_([request], None)
+        if not success:
+            return False
+            
+        for observation in request.results():
+            candidate = observation.topCandidates_(1).firstObject()
+            if candidate:
+                text = candidate.string().lower()
+                if "accept" in text or "allow" in text or "antigravity" in text:
+                    return True
+        return False
+    except Exception as e:
+        print(f"OCR Error: {e}")
+        return True # Fail open so it still tries the API if OCR crashes
+
 
 def take_screenshot(filename="/tmp/aicceptor_screen.png"):
     """Takes a screenshot using native macOS utility."""
@@ -228,8 +259,22 @@ class AIcceptorApp(ctk.CTk):
                 time.sleep(2)
                 continue
                 
-            self.log(f"Taking screenshot... using {model_name}")
+            self.log(f"Scanning screen locally...")
             screenshot_path = take_screenshot()
+            
+            # Local OCR Check
+            if not check_local_ocr(screenshot_path):
+                # Clean up
+                if os.path.exists(screenshot_path):
+                    os.remove(screenshot_path)
+                # Sleep in small chunks so we can interrupt quickly if user clicks "Stop"
+                for _ in range(interval):
+                    if not self.running:
+                        break
+                    time.sleep(1)
+                continue
+                
+            self.log(f"Prompt detected! Analyzing with {model_name}...")
             
             try:
                 if model_name == "Gemini 2.5 Flash":
