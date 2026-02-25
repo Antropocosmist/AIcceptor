@@ -332,13 +332,19 @@ class AIcceptorApp(ctk.CTk):
                 
                 if status == "SAFE":
                     target_btn = None
+                    
+                    # Sort buttons by Y coordinate descending (highest Y = lowest on screen).
+                    # The actual "Accept All" button is always at the bottom of the popup, 
+                    # below the chat history where the AI might have typed "Accept All".
+                    sorted_buttons = sorted(found_buttons, key=lambda b: b["y"], reverse=True)
+                    
                     # Prioritize "Accept All" if present
-                    for btn in found_buttons:
+                    for btn in sorted_buttons:
                         if "all" in btn["text"]:
                             target_btn = btn
                             break
-                    if not target_btn and found_buttons:
-                        target_btn = found_buttons[0]
+                    if not target_btn and sorted_buttons:
+                        target_btn = sorted_buttons[0]
                         
                     if target_btn:
                         x = target_btn["x"]
