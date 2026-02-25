@@ -56,29 +56,39 @@ Return ONLY valid JSON.
 """
 
 def check_local_ocr(image_path):
-    """Uses macOS Vision framework to scan for 'Accept' or 'Allow' instantly."""
+    """Uses macOS Vision framework to scan for 'Accept' or 'Allow' instantly. Returns (is_detected, buttons_list)."""
     try:
         ns_image = NSImage.alloc().initWithContentsOfFile_(image_path)
         if not ns_image:
-            return False
+            return False, []
         cg_image = ns_image.CGImageForProposedRect_context_hints_(None, None, None)[0]
         request = Vision.VNRecognizeTextRequest.alloc().init()
-        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast) # Use fast level for quick trigger
+        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate) 
         handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(cg_image, None)
         success, _ = handler.performRequests_error_([request], None)
         if not success:
-            return False
+            return False, []
             
+        screen_w, screen_h = pyautogui.size()
+        found_buttons = []
+        is_detected = False
+        
         for observation in request.results():
             candidate = observation.topCandidates_(1).firstObject()
             if candidate:
                 text = candidate.string().lower()
                 if "accept" in text or "allow" in text or "antigravity" in text:
-                    return True
-        return False
+                    is_detected = True
+                    bbox = observation.boundingBox()
+                    x = (bbox.origin.x + bbox.size.width / 2.0) * screen_w
+                    y = (1.0 - (bbox.origin.y + bbox.size.height / 2.0)) * screen_h
+                    found_buttons.append({"text": text, "x": x, "y": y})
+                    
+        return is_detected, found_buttons
     except Exception as e:
         print(f"OCR Error: {e}")
-        return True # Fail open so it still tries the API if OCR crashes
+        return True, [] # Fail open so it still tries the API if OCR crashes
+
 
 
 def take_screenshot(filename="/tmp/aicceptor_screen.png"):
@@ -257,7 +267,7 @@ class AIcceptorApp(ctk.CTk):
             self.log(f"Scanning screen locally...")
             screenshot_path = take_screenshot()
             
-            ocr_detected = check_local_ocr(screenshot_path)
+            ocr_detected, found_buttons = check_local_ocr(screenshot_path)
             
             if waiting_for_disappearance:
                 if ocr_detected:
@@ -312,15 +322,22 @@ class AIcceptorApp(ctk.CTk):
                     text = text[:-3]
                     
                 result = json.loads(text.strip())
-                
                 status = result.get("status")
                 
                 if status == "SAFE":
-                    coords = result.get("button_coordinates")
-                    if coords and coords.get("x") is not None and coords.get("y") is not None:
-                        x = coords["x"]
-                        y = coords["y"]
-                        self.log(f"SAFE detected. Clicking at ({x}, {y}).")
+                    target_btn = None
+                    # Prioritize "Accept All" if present
+                    for btn in found_buttons:
+                        if "all" in btn["text"]:
+                            target_btn = btn
+                            break
+                    if not target_btn and found_buttons:
+                        target_btn = found_buttons[0]
+                        
+                    if target_btn:
+                        x = target_btn["x"]
+                        y = target_btn["y"]
+                        self.log(f"SAFE detected. OCR Click at ({x:.1f}, {y:.1f}) for '{target_btn['text']}'.")
                         
                         # Temporarily hijack mouse
                         original_x, original_y = pyautogui.position()
@@ -330,7 +347,7 @@ class AIcceptorApp(ctk.CTk):
                         
                         self.last_action_time = time.time()
                     else:
-                        self.log("SAFE action, but no coordinates provided.")
+                        self.log("SAFE action, but local OCR lost button coordinates.")
                         self.last_action_time = time.time()
                 
                 elif status == "UNSAFE":
