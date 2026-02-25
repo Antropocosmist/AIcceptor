@@ -99,8 +99,8 @@ def check_local_ocr(image_path):
 
 def take_screenshot(filename="/tmp/aicceptor_screen.png"):
     """Takes a screenshot using native macOS utility."""
-    # -x mutes the sound, -C includes the cursor
-    subprocess.run(["screencapture", "-x", "-C", filename], check=True)
+    # -x mutes the sound, -C includes the cursor, -m main monitor only
+    subprocess.run(["screencapture", "-x", "-m", "-C", filename], check=True)
     return filename
 
 def notify_user(message, title="AIcceptor Alert"):
@@ -348,7 +348,9 @@ class AIcceptorApp(ctk.CTk):
                         # Temporarily hijack mouse
                         original_x, original_y = pyautogui.position()
                         pyautogui.moveTo(x, y, duration=0.2)
-                        pyautogui.click()
+                        pyautogui.mouseDown()
+                        time.sleep(0.05)
+                        pyautogui.mouseUp()
                         pyautogui.moveTo(original_x, original_y, duration=0.1)
                         
                         self.last_action_time = time.time()
