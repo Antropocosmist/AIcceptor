@@ -184,10 +184,12 @@ class AIcceptorApp(ctk.CTk):
         self.log_textbox.configure(state="disabled")
 
     def log(self, message):
-        self.log_textbox.configure(state="normal")
-        self.log_textbox.insert("end", f"> {message}\n")
-        self.log_textbox.see("end")
-        self.log_textbox.configure(state="disabled")
+        def _append():
+            self.log_textbox.configure(state="normal")
+            self.log_textbox.insert("end", f"> {message}\n")
+            self.log_textbox.see("end")
+            self.log_textbox.configure(state="disabled")
+        self.after(0, _append)
 
     def start_monitoring(self):
         api_key = self.api_entry.get().strip()
@@ -288,13 +290,15 @@ class AIcceptorApp(ctk.CTk):
                 if not self.running:
                     break
                 time.sleep(1)
+        def _reset_gui():
+            self.log("Stopped monitoring.")
+            self.start_btn.configure(state="normal")
+            self.stop_btn.configure(state="disabled")
+            self.model_dropdown.configure(state="normal")
+            self.api_entry.configure(state="normal")
+            self.interval_entry.configure(state="normal")
         
-        self.log("Stopped monitoring.")
-        self.start_btn.configure(state="normal")
-        self.stop_btn.configure(state="disabled")
-        self.model_dropdown.configure(state="normal")
-        self.api_entry.configure(state="normal")
-        self.interval_entry.configure(state="normal")
+        self.after(0, _reset_gui)
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("System")
