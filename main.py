@@ -267,7 +267,8 @@ class AIcceptorApp(ctk.CTk):
         self.log("Stopping... please wait for current cycle to finish.")
 
     def run_loop(self, model_name, api_key, interval):
-        waiting_for_disappearance = False
+        waiting_for_target = None
+        tracked_false_positives = []
         
         while self.running:
             self.log(f"Scanning screen locally...")
@@ -275,35 +276,42 @@ class AIcceptorApp(ctk.CTk):
             
             ocr_detected, found_buttons = check_local_ocr(screenshot_path)
             
-            if waiting_for_disappearance:
-                if ocr_detected:
+            # 1. Update waiting_for_target
+            if waiting_for_target:
+                still_present = any(abs(b['x'] - waiting_for_target[0]) < 30 and abs(b['y'] - waiting_for_target[1]) < 30 for b in found_buttons)
+                if still_present:
                     self.log("Waiting for prompt to be clicked or manually dismissed...")
                     # Clean up and sleep
                     if os.path.exists(screenshot_path):
                         os.remove(screenshot_path)
                     for _ in range(interval):
-                        if not self.running:
-                            break
+                        if not self.running: break
                         time.sleep(1)
                     continue
                 else:
-                    self.log("Prompt cleared. Resuming active monitoring.")
-                    waiting_for_disappearance = False
-                    # Clean up and loop
-                    if os.path.exists(screenshot_path):
-                        os.remove(screenshot_path)
-                    time.sleep(1)
-                    continue
+                    self.log("Target cleared. Resuming monitoring.")
+                    waiting_for_target = None
             
-            # If we are NOT waiting for disappearance, normal check
-            if not ocr_detected:
+            # 2. Update tracked_false_positives
+            new_tracked = []
+            for fp in tracked_false_positives:
+                if any(abs(b['x'] - fp[0]) < 30 and abs(b['y'] - fp[1]) < 30 for b in found_buttons):
+                    new_tracked.append(fp)
+            tracked_false_positives = new_tracked
+            
+            # 3. Filter found_buttons to ignore false positives
+            valid_buttons = []
+            for b in found_buttons:
+                if not any(abs(b['x'] - fp[0]) < 30 and abs(b['y'] - fp[1]) < 30 for fp in tracked_false_positives):
+                    valid_buttons.append(b)
+            
+            if not valid_buttons:
                 # Clean up
                 if os.path.exists(screenshot_path):
                     os.remove(screenshot_path)
                 # Sleep in small chunks so we can interrupt quickly if user clicks "Stop"
                 for _ in range(interval):
-                    if not self.running:
-                        break
+                    if not self.running: break
                     time.sleep(1)
                 continue
                 
@@ -334,9 +342,7 @@ class AIcceptorApp(ctk.CTk):
                     target_btn = None
                     
                     # Sort buttons by Y coordinate descending (highest Y = lowest on screen).
-                    # The actual "Accept All" button is always at the bottom of the popup, 
-                    # below the chat history where the AI might have typed "Accept All".
-                    sorted_buttons = sorted(found_buttons, key=lambda b: b["y"], reverse=True)
+                    sorted_buttons = sorted(valid_buttons, key=lambda b: b["y"], reverse=True)
                     
                     # Prioritize "Accept All" if present
                     for btn in sorted_buttons:
@@ -360,6 +366,7 @@ class AIcceptorApp(ctk.CTk):
                         pyautogui.moveTo(original_x, original_y, duration=0.1)
                         
                         self.last_action_time = time.time()
+                        waiting_for_target = (x, y)
                     else:
                         self.log("SAFE action, but local OCR lost button coordinates.")
                         self.last_action_time = time.time()
@@ -369,18 +376,20 @@ class AIcceptorApp(ctk.CTk):
                     self.log(f"UNSAFE ACTION DETECTED.")
                     notify_user(message=f"Review needed: {reason}", title="⚠️ AIcceptor Alert")
                     self.last_action_time = time.time()
+                    
+                    if valid_buttons:
+                        lowest_btn = sorted(valid_buttons, key=lambda b: b["y"], reverse=True)[0]
+                        waiting_for_target = (lowest_btn["x"], lowest_btn["y"])
                 
                 elif status == "NONE":
-                    self.log("No Antigravity prompt detected.")
+                    self.log("No Antigravity prompt detected. Blacklisting false positive texts.")
                     self.last_action_time = time.time()
+                    for b in valid_buttons:
+                        tracked_false_positives.append((b["x"], b["y"]))
                     
             except Exception as e:
                 self.log(f"API Error: {str(e)}")
                 self.last_action_time = time.time() + 20  # Add extra 20s backoff for API errors to preserve quota
-            
-            # Critical Step: We have successfully sent this prompt to the AI.
-            # Do NOT send it again until the button text completely disappears from the screen!
-            waiting_for_disappearance = True
             
             # Clean up
             if os.path.exists(screenshot_path):
