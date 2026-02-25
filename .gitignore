@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pyinstaller
+build/
+dist/
+*.spec
+
+# Virtual environments
+venv/
+env/
+.env
+
+# OS files
+.DS_Store
