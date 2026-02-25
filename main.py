@@ -69,7 +69,7 @@ def call_gemini(image_path, api_key):
     client = genai.Client(api_key=api_key)
     img = Image.open(image_path)
     response = client.models.generate_content(
-        model='gemini-1.5-pro-latest',
+        model='gemini-3.1-pro-preview',
         contents=[PROMPT, img]
     )
     return response.text.strip()
@@ -138,9 +138,9 @@ class AIcceptorApp(ctk.CTk):
         self.model_frame.pack(fill="x", padx=20, pady=5)
         self.model_label = ctk.CTkLabel(self.model_frame, text="Select Model:")
         self.model_label.pack(side="left")
-        self.model_var = ctk.StringVar(value="Gemini 1.5 Pro")
+        self.model_var = ctk.StringVar(value="Gemini 3.1 Pro")
         self.model_dropdown = ctk.CTkOptionMenu(self.model_frame, variable=self.model_var, 
-                                                values=["Gemini 1.5 Pro", "Claude 3.5 Sonnet", "Qwen VL Max"])
+                                                values=["Gemini 3.1 Pro", "Claude 3.5 Sonnet", "Qwen VL Max"])
         self.model_dropdown.pack(side="right", fill="x", expand=True, padx=(10, 0))
         
         # API Key
@@ -231,7 +231,7 @@ class AIcceptorApp(ctk.CTk):
             screenshot_path = take_screenshot()
             
             try:
-                if model_name == "Gemini 1.5 Pro":
+                if model_name == "Gemini 3.1 Pro":
                     text = call_gemini(screenshot_path, api_key)
                 elif model_name == "Claude 3.5 Sonnet":
                     text = call_claude(screenshot_path, api_key)
