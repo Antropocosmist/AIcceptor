@@ -195,10 +195,10 @@ class AIcceptorApp(ctk.CTk):
         # Interval
         self.interval_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.interval_frame.pack(fill="x", padx=20, pady=5)
-        self.interval_label = ctk.CTkLabel(self.interval_frame, text="Interval (sec):")
+        self.interval_label = ctk.CTkLabel(self.interval_frame, text="Local Scan Interval (sec):")
         self.interval_label.pack(side="left")
-        self.interval_entry = ctk.CTkEntry(self.interval_frame, placeholder_text="30")
-        self.interval_entry.insert(0, "30")
+        self.interval_entry = ctk.CTkEntry(self.interval_frame, placeholder_text="2")
+        self.interval_entry.insert(0, "2")
         self.interval_entry.pack(side="right", fill="x", expand=True, padx=(10, 0))
         
         # Buttons
