@@ -270,6 +270,7 @@ class AIcceptorApp(ctk.CTk):
     def run_loop(self, model_name, api_key, interval):
         waiting_for_target = None
         tracked_false_positives = []
+        consecutive_api_errors = 0
         
         while self.running:
             self.log(f"Scanning screen locally...")
@@ -328,6 +329,11 @@ class AIcceptorApp(ctk.CTk):
                 else:
                     raise Exception("Unknown model selected.")
                 
+                # Success! Reset API error tracking.
+                if consecutive_api_errors > 0:
+                    self.log("API connection re-established.")
+                    consecutive_api_errors = 0
+                
                 # Clean up JSON
                 if text.startswith("```json"):
                     text = text[7:]
@@ -382,17 +388,14 @@ class AIcceptorApp(ctk.CTk):
                         pyautogui.mouseUp()
                         pyautogui.moveTo(original_x, original_y, duration=0.1)
                         
-                        self.last_action_time = time.time()
                         waiting_for_target = (x, y)
                     else:
                         self.log("SAFE action, but local OCR lost button coordinates.")
-                        self.last_action_time = time.time()
                 
                 elif status == "UNSAFE":
                     reason = result.get("reason", "Unknown Reason")
                     self.log(f"UNSAFE ACTION DETECTED.")
                     notify_user(message=f"Review needed: {reason}", title="⚠️ AIcceptor Alert")
-                    self.last_action_time = time.time()
                     
                     if valid_buttons:
                         lowest_btn = sorted(valid_buttons, key=lambda b: b["y"], reverse=True)[0]
@@ -400,13 +403,19 @@ class AIcceptorApp(ctk.CTk):
                 
                 elif status == "NONE":
                     self.log("No Antigravity prompt detected. Blacklisting false positive texts.")
-                    self.last_action_time = time.time()
                     for b in valid_buttons:
                         tracked_false_positives.append((b["x"], b["y"]))
                     
             except Exception as e:
-                self.log(f"API Error: {str(e)}")
-                self.last_action_time = time.time() + 20  # Add extra 20s backoff for API errors to preserve quota
+                consecutive_api_errors += 1
+                backoff_time = min(60, (2 ** consecutive_api_errors)) * 10
+                self.log(f"API Error. Backing off for {backoff_time} seconds to protect quota...")
+                
+                # Active sleep backoff mask
+                for _ in range(backoff_time):
+                    if not self.running: break
+                    time.sleep(1)
+                
             
             # Clean up
             if os.path.exists(screenshot_path):
