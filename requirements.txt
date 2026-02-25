@@ -1,4 +1,4 @@
-google-generativeai>=0.8.2
+google-genai>=0.3.0
 pyautogui>=0.9.54
 Pillow>=10.4.0
 python-dotenv>=1.0.1

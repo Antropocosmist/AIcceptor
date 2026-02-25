@@ -9,7 +9,6 @@ import customtkinter as ctk
 from PIL import Image
 
 # Import models
-import google.generativeai as genai
 import anthropic
 import dashscope
 from dashscope import MultiModalConversation
@@ -66,10 +65,13 @@ def encode_image_base64(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 def call_gemini(image_path, api_key):
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    from google import genai
+    client = genai.Client(api_key=api_key)
     img = Image.open(image_path)
-    response = model.generate_content([PROMPT, img])
+    response = client.models.generate_content(
+        model='gemini-1.5-pro',
+        contents=[PROMPT, img]
+    )
     return response.text.strip()
 
 def call_claude(image_path, api_key):
