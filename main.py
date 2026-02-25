@@ -2,6 +2,7 @@ import os
 import time
 import subprocess
 import json
+import math
 import pyautogui
 import threading
 import base64
@@ -340,17 +341,33 @@ class AIcceptorApp(ctk.CTk):
                 
                 if status == "SAFE":
                     target_btn = None
+                    gemini_coords = result.get("button_coordinates")
                     
-                    # Sort buttons by Y coordinate descending (highest Y = lowest on screen).
-                    sorted_buttons = sorted(valid_buttons, key=lambda b: b["y"], reverse=True)
-                    
-                    # Prioritize "Accept All" if present
-                    for btn in sorted_buttons:
-                        if "all" in btn["text"]:
-                            target_btn = btn
-                            break
-                    if not target_btn and sorted_buttons:
-                        target_btn = sorted_buttons[0]
+                    if gemini_coords and gemini_coords.get("x") is not None and gemini_coords.get("y") is not None and valid_buttons:
+                        gx = gemini_coords["x"]
+                        gy = gemini_coords["y"]
+                        # Sensor Fusion: Snap hallucinated Gemini semantic coords to nearest physical OCR bounding box
+                        best_dist = float('inf')
+                        for b in valid_buttons:
+                            dist = math.hypot(b["x"] - gx, b["y"] - gy)
+                            if dist < best_dist:
+                                best_dist = dist
+                                target_btn = b
+                        if target_btn:
+                            self.log(f"Sensor Fusion: Snapped Gemini ({gx}, {gy}) to OCR '{target_btn['text']}' at ({target_btn['x']:.1f}, {target_btn['y']:.1f})")
+                            
+                    # Fallback if Gemini failed to provide coordinates
+                    if not target_btn:
+                        # Sort buttons by Y coordinate descending (highest Y = lowest on screen).
+                        sorted_buttons = sorted(valid_buttons, key=lambda b: b["y"], reverse=True)
+                        
+                        # Prioritize "Accept All" if present
+                        for btn in sorted_buttons:
+                            if "all" in btn["text"]:
+                                target_btn = btn
+                                break
+                        if not target_btn and sorted_buttons:
+                            target_btn = sorted_buttons[0]
                         
                     if target_btn:
                         x = target_btn["x"]
