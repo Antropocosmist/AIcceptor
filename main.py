@@ -251,19 +251,36 @@ class AIcceptorApp(ctk.CTk):
         self.log("Stopping... please wait for current cycle to finish.")
 
     def run_loop(self, model_name, api_key, interval):
-        cooldown = 10 # Seconds to wait after an action before re-evaluating
+        waiting_for_disappearance = False
         
         while self.running:
-            current_time = time.time()
-            if current_time - self.last_action_time < cooldown:
-                time.sleep(2)
-                continue
-                
             self.log(f"Scanning screen locally...")
             screenshot_path = take_screenshot()
             
-            # Local OCR Check
-            if not check_local_ocr(screenshot_path):
+            ocr_detected = check_local_ocr(screenshot_path)
+            
+            if waiting_for_disappearance:
+                if ocr_detected:
+                    self.log("Waiting for prompt to be clicked or manually dismissed...")
+                    # Clean up and sleep
+                    if os.path.exists(screenshot_path):
+                        os.remove(screenshot_path)
+                    for _ in range(interval):
+                        if not self.running:
+                            break
+                        time.sleep(1)
+                    continue
+                else:
+                    self.log("Prompt cleared. Resuming active monitoring.")
+                    waiting_for_disappearance = False
+                    # Clean up and loop
+                    if os.path.exists(screenshot_path):
+                        os.remove(screenshot_path)
+                    time.sleep(1)
+                    continue
+            
+            # If we are NOT waiting for disappearance, normal check
+            if not ocr_detected:
                 # Clean up
                 if os.path.exists(screenshot_path):
                     os.remove(screenshot_path)
@@ -329,6 +346,10 @@ class AIcceptorApp(ctk.CTk):
             except Exception as e:
                 self.log(f"API Error: {str(e)}")
                 self.last_action_time = time.time() + 20  # Add extra 20s backoff for API errors to preserve quota
+            
+            # Critical Step: We have successfully sent this prompt to the AI.
+            # Do NOT send it again until the button text completely disappears from the screen!
+            waiting_for_disappearance = True
             
             # Clean up
             if os.path.exists(screenshot_path):
