@@ -206,14 +206,18 @@ class AIcceptorApp(ctk.CTk):
                                                 values=["Gemini 2.5 Flash", "Claude 3.5 Sonnet", "Qwen VL Max"])
         self.model_dropdown.pack(side="right", fill="x", expand=True, padx=(10, 0))
         
-        # API Key
-        self.api_frame = ctk.CTkFrame(self, fg_color="transparent")
+        # Shared container so we can swap api_frame ↔ danger_notice reliably
+        self.mid_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.mid_frame.pack(fill="x", padx=0, pady=0)
+
+        # API Key row (shown in Safe mode)
+        self.api_frame = ctk.CTkFrame(self.mid_frame, fg_color="transparent")
         self.api_frame.pack(fill="x", padx=20, pady=5)
         self.api_label = ctk.CTkLabel(self.api_frame, text="API Key:")
         self.api_label.pack(side="left")
         self.api_entry = ctk.CTkEntry(self.api_frame, show="*", placeholder_text="sk-...")
         self.api_entry.pack(side="right", fill="x", expand=True, padx=(10, 0))
-        
+
         # Try load from .env if present
         try:
             from dotenv import load_dotenv
@@ -223,9 +227,9 @@ class AIcceptorApp(ctk.CTk):
         except:
             pass
 
-        # Dangerous-mode notice label (hidden by default)
+        # Dangerous-mode notice (lives in same container, hidden initially)
         self.danger_notice = ctk.CTkLabel(
-            self,
+            self.mid_frame,
             text="⚠️  Dangerous mode: AI check is BYPASSED. All prompts auto-accepted.",
             text_color="#FF6B6B",
             wraplength=400,
@@ -257,13 +261,15 @@ class AIcceptorApp(ctk.CTk):
         self.log_textbox.configure(state="disabled")
 
     def _on_regime_change(self, value):
-        """Show/hide API key section based on selected regime."""
+        """Swap API key row ↔ danger notice based on selected regime."""
         if value == "Dangerous":
             self.api_frame.pack_forget()
-            self.danger_notice.pack(before=self.interval_frame, padx=20, pady=(0, 4))
+            self.danger_notice.pack(fill="x", padx=20, pady=5)
+            self.model_dropdown.configure(state="disabled")
         else:
             self.danger_notice.pack_forget()
-            self.api_frame.pack(before=self.interval_frame, fill="x", padx=20, pady=5)
+            self.api_frame.pack(fill="x", padx=20, pady=5)
+            self.model_dropdown.configure(state="normal")
 
     def log(self, message):
         def _append():
