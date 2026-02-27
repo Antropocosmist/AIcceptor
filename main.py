@@ -170,7 +170,7 @@ class AIcceptorApp(ctk.CTk):
         super().__init__()
 
         self.title("AIcceptor")
-        self.geometry("450x450")
+        self.geometry("450x520")
         self.resizable(False, False)
         
         # State
@@ -180,7 +180,21 @@ class AIcceptorApp(ctk.CTk):
         
         # UI Elements
         self.title_label = ctk.CTkLabel(self, text="AIcceptor", font=ctk.CTkFont(size=24, weight="bold"))
-        self.title_label.pack(pady=(20, 10))
+        self.title_label.pack(pady=(20, 5))
+
+        # Regime selection
+        self.regime_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.regime_frame.pack(fill="x", padx=20, pady=(0, 8))
+        self.regime_label = ctk.CTkLabel(self.regime_frame, text="Regime:")
+        self.regime_label.pack(side="left")
+        self.regime_var = ctk.StringVar(value="Safe")
+        self.regime_btn = ctk.CTkSegmentedButton(
+            self.regime_frame,
+            values=["Safe", "Dangerous"],
+            variable=self.regime_var,
+            command=self._on_regime_change
+        )
+        self.regime_btn.pack(side="right", fill="x", expand=True, padx=(10, 0))
         
         # Model Selection
         self.model_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -209,6 +223,16 @@ class AIcceptorApp(ctk.CTk):
         except:
             pass
 
+        # Dangerous-mode notice label (hidden by default)
+        self.danger_notice = ctk.CTkLabel(
+            self,
+            text="⚠️  Dangerous mode: AI check is BYPASSED. All prompts auto-accepted.",
+            text_color="#FF6B6B",
+            wraplength=400,
+            font=ctk.CTkFont(size=11)
+        )
+        # Not packed yet — shown only in Dangerous mode
+
         # Interval
         self.interval_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.interval_frame.pack(fill="x", padx=20, pady=5)
@@ -232,6 +256,15 @@ class AIcceptorApp(ctk.CTk):
         self.log_textbox.insert("end", "Welcome to AIcceptor.\nReady to start.\n")
         self.log_textbox.configure(state="disabled")
 
+    def _on_regime_change(self, value):
+        """Show/hide API key section based on selected regime."""
+        if value == "Dangerous":
+            self.api_frame.pack_forget()
+            self.danger_notice.pack(before=self.interval_frame, padx=20, pady=(0, 4))
+        else:
+            self.danger_notice.pack_forget()
+            self.api_frame.pack(before=self.interval_frame, fill="x", padx=20, pady=5)
+
     def log(self, message):
         def _append():
             self.log_textbox.configure(state="normal")
@@ -241,9 +274,11 @@ class AIcceptorApp(ctk.CTk):
         self.after(0, _append)
 
     def start_monitoring(self):
+        regime = self.regime_var.get()  # "Safe" | "Dangerous"
         api_key = self.api_entry.get().strip()
-        if not api_key:
-            self.log("Error: API Key is required.")
+
+        if regime == "Safe" and not api_key:
+            self.log("Error: API Key is required in Safe mode.")
             return
             
         try:
@@ -255,19 +290,25 @@ class AIcceptorApp(ctk.CTk):
         self.running = True
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
+        self.regime_btn.configure(state="disabled")
         self.model_dropdown.configure(state="disabled")
         self.api_entry.configure(state="disabled")
         self.interval_entry.configure(state="disabled")
         
-        self.log("Starting monitoring in background...")
-        self.monitor_thread = threading.Thread(target=self.run_loop, args=(self.model_var.get(), api_key, interval), daemon=True)
+        mode_label = "SAFE mode (AI analysis ON)" if regime == "Safe" else "DANGEROUS mode (AI analysis OFF)"
+        self.log(f"Starting monitoring — {mode_label}")
+        self.monitor_thread = threading.Thread(
+            target=self.run_loop,
+            args=(self.model_var.get(), api_key, interval, regime),
+            daemon=True
+        )
         self.monitor_thread.start()
 
     def stop_monitoring(self):
         self.running = False
         self.log("Stopping... please wait for current cycle to finish.")
 
-    def run_loop(self, model_name, api_key, interval):
+    def run_loop(self, model_name, api_key, interval, regime="Safe"):
         waiting_for_target = None
         tracked_false_positives = []
         consecutive_api_errors = 0
@@ -316,7 +357,29 @@ class AIcceptorApp(ctk.CTk):
                     if not self.running: break
                     time.sleep(1)
                 continue
-                
+
+            # ── DANGEROUS MODE: skip AI entirely ──────────────────────────────
+            if regime == "Dangerous":
+                # Prefer "Accept all" button, otherwise take the lowest on screen
+                sorted_buttons = sorted(valid_buttons, key=lambda b: b["y"], reverse=True)
+                target_btn = next((b for b in sorted_buttons if "all" in b["text"]), sorted_buttons[0])
+                x, y = target_btn["x"], target_btn["y"]
+                self.log(f"[DANGEROUS] Auto-clicking '{target_btn['text']}' at ({x:.1f}, {y:.1f}) — no AI check.")
+                original_x, original_y = pyautogui.position()
+                pyautogui.moveTo(x, y, duration=0.2)
+                pyautogui.mouseDown()
+                time.sleep(0.05)
+                pyautogui.mouseUp()
+                pyautogui.moveTo(original_x, original_y, duration=0.1)
+                waiting_for_target = (x, y)
+                if os.path.exists(screenshot_path):
+                    os.remove(screenshot_path)
+                for _ in range(interval):
+                    if not self.running: break
+                    time.sleep(1)
+                continue
+            # ─────────────────────────────────────────────────────────────────
+
             self.log(f"Prompt detected! Analyzing with {model_name}...")
             
             try:
@@ -430,6 +493,7 @@ class AIcceptorApp(ctk.CTk):
             self.log("Stopped monitoring.")
             self.start_btn.configure(state="normal")
             self.stop_btn.configure(state="disabled")
+            self.regime_btn.configure(state="normal")
             self.model_dropdown.configure(state="normal")
             self.api_entry.configure(state="normal")
             self.interval_entry.configure(state="normal")
